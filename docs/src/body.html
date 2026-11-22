@@ -1,0 +1,327 @@
+<header class="hero">
+  <span class="tag mint">Lean 4 · Mathlib v4.36.0</span><span class="tag gold">Pro gradu, Univ. of Helsinki 2013</span>
+  <h1>The <em>analytic Poincaré inequality</em><br>on planar regions — formalized</h1>
+  <p class="lead">
+    A guided tour of the Lean proofs in <code>DirichletPoincare/</code>. For which bounded regions
+    <b>G ⊂ ℂ</b> is every holomorphic function controlled by its derivative,
+    ∫<sub>G</sub>|f|² ≤ K ∫<sub>G</sub>|f′|²? Starlike regions: yes. A chain of discs joined by hair-thin
+    necks: no. Every statement below is fully machine-checked.
+  </p>
+  <p class="muted small">Based on Jarno Varis, <i>Dirichlet space and analytic Poincaré inequality</i> (2013, in Finnish).
+    The simulations are numerical illustrations of what the Lean files prove; the source of every
+    proof is browsable at the bottom of the page.</p>
+  <div class="badges">
+    <span class="badge ok"><b>13</b> thesis results proved</span>
+    <span class="badge ok"><b>0</b> <code>sorry</code></span>
+    <span class="badge"><b id="files-badge">21</b> Lean files</span>
+    <span class="badge"><b id="loc-badge">~5 000</b> lines</span>
+    <span class="badge">axioms: <b>propext · choice · Quot.sound</b></span>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<section class="panel" id="overview">
+  <h2><span class="num">0</span>Map of the results</h2>
+  <p>Solid boxes are results from the thesis, dashed boxes are helper lemmas that had to be proved from scratch
+    because Mathlib does not have them. Arrows mean “is used in the Lean proof of”. Click a box.</p>
+  <div class="graphwrap">
+    <svg id="graph" viewBox="0 0 1000 640" role="img" aria-label="dependency graph of the formalized results"></svg>
+    <div id="detail" class="card"><h3>Select a result</h3><p class="muted">Statement, Lean name, proof idea and deviations from the thesis appear here.</p></div>
+  </div>
+  <div class="legend">
+    <span><i style="background:#8ce0bb"></i>Section 2: positive results</span>
+    <span><i style="background:#ff9580"></i>Section 3: counterexamples</span>
+    <span><i style="background:#14212a;border:1px dashed #9eb0b2"></i>helper lemma (new)</span>
+    <span><i style="background:#1d2e3a;border:1px dotted #9eb0b2"></i>stand-alone result</span>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="setting">
+  <h2><span class="num">1</span>The objects</h2>
+  <p>Everything lives in the plane <code>ℂ ≅ ℝ²</code> with Lebesgue area measure <b>dA</b>. All integrals are
+    lower Lebesgue integrals in <code>ℝ≥0∞</code>, so “finite” just means <code>&lt; ⊤</code>.</p>
+  <div class="cols">
+    <div class="card"><h4>Dirichlet space D(G)</h4>
+      <p>f holomorphic on G, f(z₀)=0, and finite energy</p>
+      <div class="eq">‖f‖²<sub>D</sub> = ∫<sub>G</sub> |f′(z)|² dA &lt; ∞</div>
+      <p class="small muted"><code>dirichletEnergy</code>, <code>IsInDirichletSpace</code></p></div>
+    <div class="card"><h4>Bergman norm</h4>
+      <p>The plain area-integral of |f|²</p>
+      <div class="eq blue">‖f‖²<sub>B</sub> = ∫<sub>G</sub> |f(z)|² dA</div>
+      <p class="small muted"><code>bergmanNormSq</code>; the thesis' <code>D(G) ⊂ B(G)</code> is <code>DirichletSubsetBergman</code></p></div>
+    <div class="card"><h4>Poincaré (2,2) inequality</h4>
+      <p>One constant works for the whole space</p>
+      <div class="eq mint">∃ K &lt; ∞ ∀ f∈D(G): ‖f‖²<sub>B</sub> ≤ K ‖f‖²<sub>D</sub></div>
+      <p class="small muted"><code>PoincareInequality G z₀</code></p></div>
+  </div>
+<pre class="lean">def PoincareInequality (G : Set ℂ) (z₀ : ℂ) : Prop :=
+  ∃ K : ℝ≥0∞, K &lt; ⊤ ∧
+    ∀ f : ℂ → ℂ, IsInDirichletSpace G z₀ f → bergmanNormSq G f ≤ K * dirichletEnergy G f</pre>
+  <h3>Poincaré quotient explorer</h3>
+  <p>Pick a region and a function f. The simulator computes <b>Q(f) = ‖f−f(z₀)‖²<sub>B</sub> / ‖f‖²<sub>D</sub></b>
+    on a grid. The inequality says: Q stays below a constant K over <i>all</i> f. Click the picture to move the base point z₀;
+    press “Sample 400 random f” to hunt for the largest quotient. For the annulus, which is not starlike,
+    Theorem 2.22 still applies because it can be cut (dashed rays) into three starlike sectors.</p>
+  <div class="viz">
+    <div class="stage"><canvas id="qc-canvas"></canvas></div>
+    <div class="controls">
+      <label>Region<select id="qc-region">
+        <option value="disc">Unit disc (convex)</option>
+        <option value="square">Square (convex)</option>
+        <option value="lshape">L-shape (starlike, not convex)</option>
+        <option value="annulus">Annulus (piecewise starlike)</option></select></label>
+      <label>Function f<select id="qc-func">
+        <option value="z">f = z</option><option value="z3">f = z³</option><option value="z8">f = z⁸</option>
+        <option value="exp">f = e^{3z}</option><option value="rand">random polynomial (deg ≤ 6)</option></select></label>
+      <div class="row"><button id="qc-new">New random f</button><button id="qc-sample" class="ghost">Sample 400 random f</button></div>
+      <div id="qc-out" class="readout"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="starlike">
+  <h2><span class="num">2</span>Starlike regions satisfy it <span class="tag mint">Theorem 2.13</span></h2>
+  <p>A region is <b>starlike</b> if some centre w₀ sees every point: the segment from w₀ to z stays inside for all z.
+    Convex regions are starlike, but so are stars and L-shapes. Move the blue centre and the gold point.
+    The green shaded set is the <i>kernel</i> (all valid centres; it is the intersection of the half-planes left of each
+    edge); a region is starlike exactly when this kernel is non-empty.</p>
+  <div class="viz">
+    <div class="stage"><canvas id="sl-canvas"></canvas></div>
+    <div class="controls">
+      <label>Region<select id="sl-preset">
+        <option value="star">5-pointed star</option><option value="hex">Hexagon (convex)</option>
+        <option value="ell">L-shape</option><option value="u">U-shape (not starlike)</option>
+        <option value="comb">Comb (not starlike)</option></select></label>
+      <label class="check"><input type="checkbox" id="sl-kernel" checked> show kernel (valid centres)</label>
+      <label class="check"><input type="checkbox" id="sl-rays" checked> show rays ρ(θ) from the centre</label>
+      <div id="sl-out" class="readout"></div>
+    </div>
+  </div>
+  <h3>How the Lean proof goes <span class="tag blue">Starlike{Aux,Main}.lean</span></h3>
+  <p>The thesis proves 2.13 via the deep Lemma 2.10. The Lean proof is direct and uses polar coordinates around the centre.</p>
+  <div class="cols">
+    <div class="card"><h4>1 · Ray estimate</h4><p>Integrate f′ along a ray and use Cauchy–Schwarz (<code>ray_estimate</code>):</p>
+      <div class="eq">|f(w₀+ρu) − f(w₀)|² ≤ ρ ∫₀^ρ |f′(w₀+su)|² ds</div></div>
+    <div class="card"><h4>2 · Polar coordinates</h4><p>Starlikeness keeps the whole ray inside G, so a radial Hardy-type inequality (<code>radial_bound</code>) bounds</p>
+      <div class="eq">∫<sub>G</sub> |f−f(w₀)|² ≤ R³ ∫ (…) ∫<sub>G</sub>|f′|²-weighted</div></div>
+    <div class="card"><h4>3 · The singular centre</h4><p>The weight blows up as ρ→0. Near w₀ it is controlled by the <i>area mean-value</i> inequality (next section) applied to f′:</p>
+      <div class="eq blue">|f′(u)|² ≤ E / area(B(u,δ))</div></div>
+    <div class="card"><h4>4 · Move the base point</h4><p>The constant |f(w₀)|² is controlled using f(z₀)=0 on a small disc around z₀, giving</p>
+      <div class="eq mint">‖f‖²<sub>B</sub> ≤ 2‖f−f(w₀)‖² + 2|f(w₀)|²·area(G) ≤ K ‖f‖²<sub>D</sub></div></div>
+  </div>
+<pre class="lean">theorem poincare_of_starlike {G : Set ℂ} (hbdd : Bornology.IsBounded G)
+    (hS : IsStarlikeRegion G) {z₀ : ℂ} (hz₀ : z₀ ∈ G) :
+    PoincareInequality G z₀</pre>
+  <p><b>Theorem 2.22</b> extends this to <i>piecewise</i> starlike regions G = E ∪ G₁ ∪ … ∪ Gₙ (null set E): apply 2.13 on each piece, then
+    bound the value of f at each piece's base point by a chain of discs across the connected region.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="meanvalue">
+  <h2><span class="num">3</span>The missing tool: an area mean-value inequality <span class="tag gold">AreaMeanValue.lean</span></h2>
+  <p>Mathlib has the mean-value property on <i>circles</i>, but not on discs. The Lean proof computes in polar coordinates
+    and averages the circle identity over the radius. For holomorphic g on a disc:</p>
+  <div class="eq mint">|g(w)|² · area(B(w,r)) ≤ ∫<sub>B(w,r)</sub> |g|² dA &nbsp;&nbsp;(<code>sq_mul_volume_le</code>)</div>
+  <p>Try it: the circle average and the area average of a holomorphic f both equal f(w) exactly (up to quadrature error);
+    for the non-holomorphic |z|² they do not.</p>
+  <div class="viz">
+    <div class="stage"><canvas id="mv-canvas"></canvas></div>
+    <div class="controls">
+      <label>Function<select id="mv-func">
+        <option value="exp">e^z</option><option value="cub">z³ − z</option><option value="sin">sin z</option>
+        <option value="abs2">|z|² (not holomorphic)</option></select></label>
+      <label>centre Re w <span class="val" id="mv-cx-v"></span><input type="range" id="mv-cx" min="-1.5" max="1.5" step="0.01" value="0.3"></label>
+      <label>centre Im w <span class="val" id="mv-cy-v"></span><input type="range" id="mv-cy" min="-1.5" max="1.5" step="0.01" value="-0.2"></label>
+      <label>radius r <span class="val" id="mv-r-v"></span><input type="range" id="mv-r" min="0.05" max="1.5" step="0.01" value="0.7"></label>
+      <div id="mv-out" class="readout"></div>
+    </div>
+  </div>
+  <p class="small muted">Proof ingredients in Lean: <code>lintegral_ball_polar</code> (polar form of a disc integral), <code>circle_sq_le</code>
+    (Cauchy–Schwarz on each circle plus Mathlib's circle mean-value property), then integrate over ρ.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="inclusion">
+  <h2><span class="num">4</span>Inclusion ⇒ bounded <span class="tag mint">Lemma 2.10</span> <span class="tag">Corollary 2.12</span></h2>
+  <p>If every f∈D(G) happens to lie in B(G), then automatically ‖f‖<sub>B</sub> ≤ √C ‖f‖<sub>D</sub> for one constant C —
+    a closed-graph-type phenomenon. The Lean proof applies Mathlib's open-mapping machinery; step through it.</p>
+  <div class="stepper">
+    <svg id="inc-svg" viewBox="0 0 560 330">
+      <defs>
+        <marker id="sarr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4b6a73"/></marker>
+        <marker id="sarrhot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ffd27b"/></marker>
+      </defs>
+      <g class="box" id="b-D" transform="translate(30,40)"><rect width="150" height="64"/><text x="75" y="28">D(G)</text><text class="sm" x="75" y="48">f holomorphic, f(z₀)=0</text></g>
+      <g class="box" id="b-X" transform="translate(380,40)"><rect width="150" height="64"/><text x="75" y="28">X ⊂ L²(G)</text><text class="sm" x="75" y="48">derivatives f′</text></g>
+      <g class="box" id="b-G" transform="translate(30,230)"><rect width="150" height="64"/><text x="75" y="28">Γ ⊂ L² × L²</text><text class="sm" x="75" y="48">graph {(f′, f)}</text></g>
+      <g class="box" id="b-K" transform="translate(380,230)"><rect width="150" height="64"/><text x="75" y="28">‖f‖₂ ≤ K‖f′‖₂</text><text class="sm" x="75" y="48">antilipschitz</text></g>
+      <path class="arrow" id="a-DX" d="M182 72 H378"/><text class="sm" x="280" y="62">f ↦ f′</text>
+      <path class="arrow" id="a-DG" d="M105 106 V228"/><text class="sm" x="140" y="172">f ↦ (f′, f)</text>
+      <path class="arrow" id="a-GX" d="M182 250 C300 250 300 250 378 114" />
+      <text class="sm" x="330" y="185">π₁ (injective)</text>
+      <path class="arrow" id="a-GK" d="M182 262 H378"/><text class="sm" x="280" y="282">open mapping</text>
+    </svg>
+    <div>
+      <div id="stepbody"></div>
+      <div class="stepnav"><button id="step-prev" class="ghost">← prev</button><button id="step-next">next →</button>
+        <div class="dots" id="step-dots"></div></div>
+    </div>
+  </div>
+<pre class="lean">theorem inclusion_bounded {G : Set ℂ} (hR : IsRegion G) (_hbdd : Bornology.IsBounded G)
+    {z₀ : ℂ} (hz₀ : z₀ ∈ G) (h : DirichletSubsetBergman G z₀) :
+    ∃ C : ENNReal, C &lt; ⊤ ∧
+      ∀ f : ℂ → ℂ, IsInDirichletSpace G z₀ f → bergmanNormSq G f ≤ C * dirichletEnergy G f</pre>
+  <p><b>Corollary 2.12</b> is the immediate consequence: on a bounded region, <code>D(G) ⊂ B(G)</code> ⇔ the Poincaré (2,2) inequality.
+    The Lean version of Lemma 2.10 needs <code>IsRegion G</code>: on a disconnected set a function can be constant on a component
+    not containing z₀, where its energy is zero.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="riemann">
+  <h2><span class="num">5</span>Conformal maps and multipliers <span class="tag mint">Theorem 2.5</span> <span class="tag">Lemma 2.4</span></h2>
+  <p>For a simply connected region G = φ(U) with Riemann map φ from the unit disc U, the following are equivalent:
+    (1) D(G)⊂B(G) · (2) <i>z·f</i> ∈ D(G) for every f∈D(G) · (3) φ·g ∈ D(U) for every g∈D(U) · (4) φ′·g ∈ B(U) for every g∈D(U).
+    The engine is that the Dirichlet energy is <b>conformally invariant</b>:</p>
+  <div class="eq mint">∫<sub>G</sub> |f′|² dA = ∫<sub>U</sub> |(f∘φ)′|² dA &nbsp;&nbsp; (area element transforms by |φ′|²)</div>
+  <p>Below: the unit disc with its polar grid, shaded by the Jacobian |φ′|², and the image region. The numbers compare
+    the two sides computed <i>independently</i> (the left one on a grid inside the image curve).</p>
+  <div class="viz wide">
+    <div class="stage two"><canvas id="rm-u"></canvas><canvas id="rm-g"></canvas></div>
+  </div>
+  <div class="viz">
+    <div class="controls">
+      <label>Conformal map φ<select id="rm-map">
+        <option value="quad">φ(z) = z + a z²  (|a| ≤ ½)</option>
+        <option value="cub">φ(z) = z + a z³  (|a| ≤ ⅓)</option>
+        <option value="expo">φ(z) = z·e^{a z}  (|a| ≤ 1)</option></select></label>
+      <label>parameter a <span class="val" id="rm-a-v"></span><input type="range" id="rm-a" min="0" max="1" step="0.01" value="0.4"></label>
+      <label>test function f<select id="rm-f"><option value="w2">f(w) = w²</option><option value="w3">f(w) = w³</option><option value="e">f(w) = e^w</option></select></label>
+    </div>
+    <div id="rm-out" class="readout"></div>
+  </div>
+  <h3>The new ingredient: injective ⇒ φ′ ≠ 0</h3>
+  <p>To transport functions back from U to G one needs a <i>holomorphic inverse</i>. Mathlib has neither “injective holomorphic maps have nonvanishing
+    derivative” nor holomorphy of the inverse, so both are proved in <code>RiemannAux.lean</code>: if φ′(a)=0 then locally
+    φ−φ(a) = ((z−a)h(z))<sup>k</sup> with k ≥ 2 and an analytic k-th root h; the local open-mapping property of w=(z−a)h and a primitive root of
+    unity give two distinct points with the same image — contradicting injectivity. (1)↔(2) and (3)↔(4) follow from one multiplier lemma
+    <code>isMultiplier_iff</code>: a bounded holomorphic c multiplies D(S) into itself ⇔ c′f ∈ B(S) for all f∈D(S).</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="counter">
+  <h2><span class="num">6</span>A bounded region where it fails <span class="tag coral">Theorem 3.2</span> <span class="tag coral">Theorem 3.14</span></h2>
+  <p>Take chambers <b>Dₖ = B(cₖ, cₖ/4)</b> with cₖ = 1/mₖ² along the real axis, joined by rectangular necks of half-height hₖ = 1/mₖ¹⁰.
+    The integers mₖ grow so fast (they are chosen recursively, <code>Params.lean</code>) that the necks are essentially invisible.
+    The test functions g<sub>m</sub>(z) = (1−z²)<sup>m</sup> are ≈ 0 near z=1 and ≈ 1 near the small chambers.</p>
+  <h3>The region (illustrative growth m<sub>k+1</sub> = λ·m<sub>k</sub>)</h3>
+  <div class="viz">
+    <div class="stage"><canvas id="rg-canvas"></canvas></div>
+    <div class="controls">
+      <label>growth λ <span class="val" id="rg-l-v"></span><input type="range" id="rg-l" min="2" max="6" step="0.1" value="3"></label>
+      <label>zoom to chamber k <span class="val" id="rg-z-v"></span><input type="range" id="rg-z" min="0" max="4" step="0.01" value="0"></label>
+      <label class="check"><input type="checkbox" id="rg-ex" checked> exaggerate neck height (true h ≈ m⁻¹⁰)</label>
+      <div id="rg-out" class="readout"></div>
+    </div>
+  </div>
+  <h3>The test functions</h3>
+  <div class="eq coral">∫<sub>G</sub>|g<sub>m</sub>′|² ≤ 10/m⁵ &nbsp;&nbsp;(<code>energy_regionS_le</code>), &nbsp;&nbsp; ∫<sub>G</sub>|g<sub>m</sub> − c|² ≥ (1/64)·area(D<sub>m</sub>) = π/(1024 m⁴)</div>
+  <p>Here m = m<sub>n+1</sub> is chosen after the previous chambers so that the first n necks contribute little energy
+    (<code>mm_spec</code>). The ratio of the two bounds is ≥ π·m/10240, which exceeds any K for large m — so no constant works.
+    Drag m below: |g<sub>m</sub>| and the energy density |g<sub>m</sub>′|² along the real axis.</p>
+  <div class="viz">
+    <div class="stage"><canvas id="gm-canvas"></canvas></div>
+    <div class="controls">
+      <label>m (log scale) <span class="val" id="gm-m-v"></span><input type="range" id="gm-m" min="0.6" max="3.6" step="0.01" value="1.6"></label>
+      <label>target constant K (log₁₀) <span class="val" id="gm-k-v"></span><input type="range" id="gm-k" min="-1" max="6" step="0.1" value="2"></label>
+      <div id="gm-out" class="readout"></div>
+    </div>
+  </div>
+  <div class="legend"><span><i style="background:#8ce0bb"></i>|g<sub>m</sub>(x)|</span><span><i style="background:#ffd27b"></i>|g<sub>m</sub>′(x)|² (rescaled)</span>
+    <span><i style="background:#ff9580"></i>chamber D<sub>m</sub> at x ≈ 1/m² (g<sub>m</sub> ≈ 1)</span><span><i style="background:#9fc5ff"></i>chamber at z = 1 (g<sub>m</sub> ≈ 0)</span></div>
+  <p>Whatever the constant c is, g<sub>m</sub>−c is ≥ 1/8 in absolute value on one of the two chambers (<code>big_diff_or</code>):
+    if |c| ≥ ¼ it is large near z=1, else near the small chamber.</p>
+  <h3>Theorem 3.14: the boundary is rectifiable</h3>
+  <p>The frontier is {0} ∪ the circles ∂Dₖ ∪ the boundaries of the necks. Each piece is the image of an interval under a
+    1-Lipschitz map (<code>lipschitzWith_circleMap</code>, <code>hausdorffMeasure_image_le</code>), and the lengths are dominated by 40·4⁻ᵏ,
+    so the one-dimensional Hausdorff measure is finite.</p>
+  <div class="viz">
+    <div class="stage"><canvas id="bl-canvas"></canvas></div>
+    <div id="bl-out" class="readout"></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="lp">
+  <h2><span class="num">7</span>(2,2) holds, but L<sup>q</sup> and L<sup>∞</sup> fail <span class="tag coral">Theorem 3.21</span></h2>
+  <p>Now take the starlike region <b>G = D₀ ∪ ⋃ₖ Sₖ</b>: a disc around 1 plus thin horizontal rectangles Sₖ = (cₖ,1)×(−hₖ,hₖ).
+    Every segment from 1 to a point of G stays inside — hover to test — so Theorem 2.13 gives the (2,2) inequality. Yet:</p>
+  <ul class="tight">
+    <li>the energy of g<sub>m</sub> is still ≤ 10/m⁵ (G lies inside the larger region <code>regionS</code> for which this bound is proved);</li>
+    <li>on a rectangle of area ≥ 1/(8m¹²) at x ≈ 1/m², |g<sub>m</sub>−c| ≥ 1/8, so ‖g<sub>m</sub>−c‖<sub>L^q</sub> ≳ m<sup>−12/q</sup>;</li>
+    <li>the Poincaré (q,2) inequality ‖f‖<sub>q</sub> ≤ K‖f′‖<sub>2</sub> would need m<sup>−12/q</sup> ≲ K·m<sup>−5/2</sup> — false for large m as soon as 12/q &lt; 5/2.</li>
+  </ul>
+  <div class="viz">
+    <div class="stage"><canvas id="rs-canvas"></canvas></div>
+    <div class="controls"><p class="small muted">The picture is schematic (heights are exaggerated). Move the pointer over the region: the gold segment
+      joins the centre 1 to your point.</p><div id="rs-out" class="readout"></div></div>
+  </div>
+  <h3>Where does it break? A log–log picture</h3>
+  <p>Lower bound for ‖g<sub>m</sub>−c‖<sub>q</sub> versus K‖g<sub>m</sub>′‖<sub>2</sub> as functions of m. Once the lower bound
+    (mint) rises above the upper bound (coral) the inequality is violated. In the thesis the exponent is q = 2p/(2−p); the Lean
+    proof shows the failure for <i>every</i> q ≥ 8, i.e. p ≥ 8/5, with a single p₀ for all K.</p>
+  <div class="viz">
+    <div class="stage"><canvas id="lq-canvas"></canvas></div>
+    <div class="controls">
+      <label>exponent q <span class="val" id="lq-q-v"></span><input type="range" id="lq-q" min="1.5" max="30" step="0.1" value="8"></label>
+      <label>constant K (log₁₀) <span class="val" id="lq-k-v"></span><input type="range" id="lq-k" min="-2" max="8" step="0.1" value="2"></label>
+      <div id="lq-out" class="readout"></div>
+    </div>
+  </div>
+  <p>For q = ∞ (the (‖·‖<sub>∞</sub>, 2) inequality) the lower bound is the constant 1/8 and the upper bound K·√10·m<sup>−5/2</sup> → 0, so it fails as well
+    (<code>not_poincareLp_top_regionStar</code>).</p>
+<pre class="lean">theorem exists_region_with_lp_poincare_failures :
+    ∃ G : Set ℂ, Bornology.IsBounded G ∧ IsRegion G ∧
+      (∀ z₀ ∈ G, PoincareInequality G z₀) ∧
+      (∀ K : ℝ≥0, ∃ p₀ : ℝ, 1 &lt; p₀ ∧ p₀ &lt; 2 ∧
+        ∀ p : ℝ, p₀ ≤ p → p &lt; 2 → ∀ z₀ ∈ G,
+          ¬ PoincareLpWithConst G z₀ (ENNReal.ofReal (2 * p / (2 - p))) 2 K) ∧
+      (∀ z₀ ∈ G, ¬ PoincareLp G z₀ ∞ 2)</pre>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="deviations">
+  <h2><span class="num">8</span>Where the Lean version differs from the thesis</h2>
+  <div class="cols">
+    <div class="card"><h4>Different proofs</h4><ul class="tight small">
+      <li><b>2.13</b> avoids Lemma 2.10 (polar coordinates + area mean-value).</li>
+      <li><b>2.22</b> via 2.13 on every piece and a chain of discs; Lemma 2.20 is proved but not needed.</li>
+      <li><b>2.10</b> by the open mapping theorem on the graph in L²×L², not the closed graph theorem.</li>
+      <li><b>3.2</b> uses discs-and-necks (not sectors) and a direct contradiction.</li>
+      <li><b>3.21</b> uses a disc-and-rectangles region instead of the thesis' sector staircase.</li></ul></div>
+    <div class="card"><h4>Stronger / modified statements</h4><ul class="tight small">
+      <li><b>3.21</b>: one p₀ = 8/5 works for all K.</li>
+      <li><b>2.10</b> needs <code>IsRegion G</code> (false for disconnected G).</li>
+      <li><b>3.15</b>: needs q &gt; 0; ‖f‖<sub>∞</sub> &gt; 0 is not needed.</li>
+      <li><b>3.18</b>: existential a₀ per r₀, weaker than a shared a.</li>
+      <li><b>3.1</b>: extra hypothesis 1 ≤ n; stand-alone, not used by 3.2.</li></ul></div>
+    <div class="card"><h4>Not formalized</h4><ul class="tight small">
+      <li><b>Corollary 2.24</b> (a constant on discs) was dropped on purpose.</li>
+      <li>Most of the <b>spiral domain</b> (thesis §4): only the strip and the injectivity of exp(i·) on it.</li>
+      <li>Background remarks and examples.</li></ul></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="panel" id="source">
+  <h2><span class="num">9</span>The Lean source</h2>
+  <p>All files, syntax-highlighted and searchable. Search for a declaration (e.g. <code>poincare_of_starlike</code>) or pick a file.
+    “Open in source” buttons in the map above jump to the declaration.</p>
+  <div class="srcwrap">
+    <div class="filelist"><input id="src-search" placeholder="search declarations…" autocomplete="off"><div id="src-files"></div></div>
+    <div class="code" id="src-code"><div class="fhead">select a file</div></div>
+  </div>
+</section>
+
+<footer>Generated by <code>docs/build.py</code> from <code>DirichletPoincare/</code> · verify with <code>lake build</code> and <code>#print axioms</code>.</footer>
