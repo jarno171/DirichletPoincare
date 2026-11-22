@@ -1,6 +1,6 @@
 # Dirichlet space and the analytic Poincaré inequality: a Lean 4 formalization
 
-This repository formalizes, in Lean 4 with Mathlib, the main results of the Pro gradu thesis
+This repository attempts to formalize, in Lean 4 with Mathlib, the main results of the Pro gradu thesis
 
 > Jarno Varis, *Dirichlet space and analytic Poincaré inequality*, University of Helsinki, 2013
 > (written in Finnish).
